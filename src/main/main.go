@@ -11,7 +11,7 @@ func main() {
 	port := flag.Uint("port", 25565, "Port of Server")
 	flag.Parse()
 
-	buffer, err, killConn := mcquery.Connect(*ipString, *port)
+	buffer, err, killConn := mcquery.Connect(*ipString, uint16(*port))
 	if err != nil {
 		panic(err)
 	}

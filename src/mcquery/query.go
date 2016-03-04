@@ -49,7 +49,7 @@ type BasicStatResponse struct {
 	HostIp     string
 }
 
-func Connect(ip string, port uint) (*bufio.ReadWriter, error, chan<- bool) {
+func Connect(ip string, port uint16) (*bufio.ReadWriter, error, chan<- bool) {
 	conn, err := net.Dial("udp", fmt.Sprintf("%s:%d", ip, port))
 	if err != nil {
 		return nil, err, nil
