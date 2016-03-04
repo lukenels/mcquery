@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -30,9 +31,12 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
+	port := flag.String("port", "80", "Port to bind to")
+	flag.Parse()
+
 	http.HandleFunc("/", handleCommand)
 
-	err := http.ListenAndServe(":80", nil)
+	err := http.ListenAndServe(fmt.Sprintf(":%s", *port), nil)
 
 	if err != nil {
 		panic(err)

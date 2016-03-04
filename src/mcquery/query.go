@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"net"
 	"strconv"
 	"time"
 )
@@ -45,6 +47,23 @@ type BasicStatResponse struct {
 	MaxPlayers string
 	HostPort   uint16
 	HostIp     string
+}
+
+func Connect(ip string, port uint) (*bufio.ReadWriter, error, chan<- bool) {
+	conn, err := net.Dial("udp", fmt.Sprintf("%s:%d", ip, port))
+	if err != nil {
+		return nil, err, nil
+	}
+
+	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+
+	kill := make(chan bool)
+	go func() {
+		<-kill
+		conn.Close()
+	}()
+
+	return rw, nil, kill
 }
 
 func BasicStat(rw *bufio.ReadWriter, challenge int32) (*BasicStatResponse, error) {

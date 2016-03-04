@@ -1,12 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"mcquery"
-	"net"
-	"os"
 )
 
 func main() {
@@ -14,19 +11,10 @@ func main() {
 	port := flag.Uint("port", 25565, "Port of Server")
 	flag.Parse()
 
-	if _, err := net.ResolveIPAddr("ip", *ipString); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
-		return
-	}
-
-	fmt.Printf("Using %s as ip and %d as port\n", *ipString, *port)
-	conn, err := net.Dial("udp", fmt.Sprintf("%s:%d", *ipString, *port))
+	buffer, err, killConn := mcquery.Connect(*ipString, *port)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
-		return
+		panic(err)
 	}
-
-	buffer := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 
 	challenge, err := mcquery.Handshake(buffer)
 	if err != nil {
@@ -49,5 +37,6 @@ func main() {
 	fmt.Printf("Server IP: %s\n", resp.HostIp)
 	fmt.Printf("Server Port: %d\n", resp.HostPort)
 
-	conn.Close()
+	killConn <- true // Stupid because main is about to exit
+
 }
