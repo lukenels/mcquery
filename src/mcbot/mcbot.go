@@ -22,6 +22,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(200)
 	w.Write(data)
 
@@ -31,6 +32,10 @@ func main() {
 
 	http.HandleFunc("/", handleCommand)
 
-	http.ListenAndServe(":80", nil)
+	err := http.ListenAndServe(":80", nil)
+
+	if err != nil {
+		panic(err)
+	}
 
 }
