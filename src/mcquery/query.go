@@ -174,33 +174,54 @@ func BasicStat(rw *bufio.ReadWriter, challenge int32) (*BasicStatResponse, error
 func Handshake(rw *bufio.ReadWriter) (int32, error) {
 
 	var response responseHeader
+	var challenge int32
+	done := make(chan error)
 	request := handshakeRequest{
 		Magic:     magicBytes(),
 		Type:      handshakeType,
 		SessionId: 1, // TODO figure this out
 	}
 
-	err := binary.Write(rw, binary.BigEndian, request)
-	if err != nil {
-		return 0, err
-	}
-	if err = rw.Flush(); err != nil {
-		return 0, err
-	}
-	if err = binary.Read(rw, binary.BigEndian, &response); err != nil {
-		return 0, err
+	go func() {
+		err := binary.Write(rw, binary.BigEndian, request)
+		if err != nil {
+			done <- err
+			return
+		}
+		if err = rw.Flush(); err != nil {
+			done <- err
+			return
+		}
+		if err = binary.Read(rw, binary.BigEndian, &response); err != nil {
+			done <- err
+			return
+		}
+
+		payload, err := rw.ReadBytes(0)
+		if err != nil {
+			done <- err
+			return
+		}
+		payload = payload[:len(payload)-1]
+
+		number, err := strconv.ParseInt(string(payload), 10, 32)
+		if err != nil {
+			done <- err
+			return
+		}
+		challenge = int32(number)
+		done <- nil
+	}()
+
+	select {
+	case <-time.After(2 * time.Second):
+		return 0, errors.New("Timed out")
+	case err := <-done:
+		if err == nil {
+			return challenge, nil
+		} else {
+			return 0, err
+		}
 	}
 
-	payload, err := rw.ReadBytes(0)
-	if err != nil {
-		return 0, err
-	}
-	payload = payload[:len(payload)-1]
-
-	challenge, err := strconv.ParseInt(string(payload), 10, 32)
-	if err != nil {
-		return 0, err
-	}
-
-	return int32(challenge), nil
 }
