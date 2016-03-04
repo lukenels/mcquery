@@ -3,6 +3,9 @@ package mcquery
 import (
 	"bufio"
 	"encoding/binary"
+	"strconv"
+	"strings"
+	"unicode"
 )
 
 const (
@@ -25,7 +28,7 @@ type response struct {
 }
 
 // Handshakes with the minecraft server, returning the challenge token
-func Handshake(rw *bufio.ReadWriter) int32 {
+func Handshake(rw *bufio.ReadWriter) (int32, error) {
 
 	var response response
 	request := request{
@@ -36,14 +39,28 @@ func Handshake(rw *bufio.ReadWriter) int32 {
 
 	err := binary.Write(rw, binary.BigEndian, request)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 	if err = rw.Flush(); err != nil {
-		panic(err)
+		return 0, err
 	}
 	if err = binary.Read(rw, binary.BigEndian, &response); err != nil {
-		panic(err)
+		return 0, err
 	}
 
-	return 0
+	payload, err := rw.ReadString(0)
+	if err != nil {
+		return 0, err
+	}
+
+	payload = strings.TrimRightFunc(payload, func(r rune) bool {
+		return !unicode.IsDigit(r)
+	})
+
+	challenge, err := strconv.ParseInt(payload, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+
+	return int32(challenge), nil
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	//	"encoding/binary"
 	"flag"
 	"fmt"
 	"mcquery"
@@ -27,26 +26,14 @@ func main() {
 		return
 	}
 
-	// query := mcquery.SendHeader{
-	// 	Magic:     [2]byte{0xFE, 0xFD},
-	// 	Type:      0x09,
-	// 	SessionId: 1,
-	// }
-
 	buffer := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 
-	mcquery.Handshake(buffer)
+	challenge, err := mcquery.Handshake(buffer)
+	if err != nil {
+		panic(err)
+	}
 
-	// binary.Write(buffer, binary.BigEndian, query)
-	// buffer.Flush()
-	//
-	// var response mcquery.RecvHeader
-	//
-	// binary.Read(buffer, binary.BigEndian, &response)
-	//
-	// s, _ := buffer.ReadString(0)
-	//
-	// fmt.Println(s)
+	fmt.Printf("The server responded with challenge id of %d\n", challenge)
 
 	conn.Close()
 }
