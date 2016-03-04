@@ -92,10 +92,14 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
+  fmt.Printf("Starting mcbot server...\n")
+
 	port := flag.String("port", "80", "Port to bind to")
 	flag.Parse()
 
 	http.HandleFunc("/", handleCommand)
+
+  fmt.Printf("Port is %s\n", *port)
 
 	err := http.ListenAndServe(fmt.Sprintf(":%s", *port), nil)
 
