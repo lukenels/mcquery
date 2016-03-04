@@ -63,6 +63,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		kill <- true
 		return
 	}
+	kill <- true
 
 	responseMap := make(map[string]interface{})
 	responseString := fmt.Sprintf("```MOTD: %s\n", statResponse.Motd)
