@@ -65,13 +65,13 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseMap := make(map[string]interface{})
-	responseString := fmt.Sprintf("MOTD: %s\n", statResponse.Motd)
+	responseString := fmt.Sprintf("```MOTD: %s\n", statResponse.Motd)
 	responseString += fmt.Sprintf("Gametype: %s\n", statResponse.Gametype)
 	responseString += fmt.Sprintf("Map: %s\n", statResponse.Map)
 	responseString += fmt.Sprintf("NumPlayers: %s\n", statResponse.NumPlayers)
 	responseString += fmt.Sprintf("MaxPlayers: %s\n", statResponse.MaxPlayers)
 	responseString += fmt.Sprintf("HostPort: %d\n", statResponse.HostPort)
-	responseString += fmt.Sprintf("HostIp: %s\n", statResponse.HostIp)
+	responseString += fmt.Sprintf("HostIp: %s\n```", statResponse.HostIp)
 	responseMap["text"] = responseString
 	responseMap["response_type"] = "in_channel"
 	data, err := json.Marshal(responseMap)
