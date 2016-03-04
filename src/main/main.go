@@ -35,5 +35,19 @@ func main() {
 
 	fmt.Printf("The server responded with challenge id of %d\n", challenge)
 
+	resp, err := mcquery.BasicStat(buffer, challenge)
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Server MOTD: %s\n", resp.Motd)
+	fmt.Printf("Current Players: %s\n", resp.NumPlayers)
+	fmt.Printf("Server Max Players: %s\n", resp.MaxPlayers)
+	fmt.Printf("Server Game Type: %s\n", resp.Gametype)
+	fmt.Printf("Server Map Name: %s\n", resp.Map)
+	fmt.Printf("Server IP: %s\n", resp.HostIp)
+	fmt.Printf("Server Port: %d\n", resp.HostPort)
+
 	conn.Close()
 }
