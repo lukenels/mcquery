@@ -50,8 +50,8 @@ func getConfiguration(filename string) Configuration {
 type Command struct {
 	Ip     string
 	Port   uint16
-	Hidden bool // Whether every use can see output or not
-	Full   bool // Perform a full stat instead of small stat
+	Hidden bool   // Whether every use can see output or not
+	Type   string // "basic", "full" or "players"
 }
 
 func parseCommand(cmd string, cfg *Configuration) (*Command, error) {
@@ -63,8 +63,7 @@ func parseCommand(cmd string, cfg *Configuration) (*Command, error) {
 
 	flagSet.StringVar(&command.Ip, "ip", cfg.DefaultIp, "Minecraft server IP")
 
-	// TODO make default part of configuration
-	flagSet.BoolVar(&command.Full, "full", false, "Perform full stat")
+	flagSet.StringVar(&command.Type, "type", "basic", "Type of operation to do")
 
 	var portNum uint64
 	flagSet.Uint64Var(&portNum, "port", uint64(cfg.DefaultPort), "MC Server Port")
@@ -78,6 +77,14 @@ func parseCommand(cmd string, cfg *Configuration) (*Command, error) {
 	}
 
 	command.Port = uint16(portNum)
+
+	switch command.Type {
+	case "basic":
+	case "full":
+	case "players":
+	default:
+		return nil, errors.New(fmt.Sprintf("Unrecognized type \"%s\"", command.Type))
+	}
 
 	return command, nil
 }
@@ -101,7 +108,9 @@ func handleCommand(input string, cfg *Configuration) (*Command, string, error) {
 	}
 
 	var responseString string
-	if !cmd.Full {
+
+	switch cmd.Type {
+	case "basic":
 		statResponse, err := mcquery.BasicStat(rw, challenge)
 		if err != nil {
 			kill <- true
@@ -116,7 +125,7 @@ func handleCommand(input string, cfg *Configuration) (*Command, string, error) {
 		responseString += fmt.Sprintf("MaxPlayers: %s\n", statResponse.MaxPlayers)
 		responseString += fmt.Sprintf("HostPort: %d\n", statResponse.HostPort)
 		responseString += fmt.Sprintf("HostIp: %s\n```", statResponse.HostIp)
-	} else {
+	case "full":
 		statResponse, err := mcquery.FullStat(rw, challenge)
 		if err != nil {
 			kill <- true
@@ -137,6 +146,24 @@ func handleCommand(input string, cfg *Configuration) (*Command, string, error) {
 			responseString += "Players: <none>\n"
 		}
 		responseString += "```"
+	case "players":
+		statResponse, err := mcquery.FullStat(rw, challenge)
+		if err != nil {
+			kill <- true
+			return cmd, "", err
+		}
+		kill <- true
+		responseString += "```\n"
+		if len(statResponse.Players) > 0 {
+			for _, player := range statResponse.Players {
+				responseString += fmt.Sprintf("%s\n", player)
+			}
+		} else {
+			responseString += "<No Players Online>\n"
+		}
+		responseString += "```"
+	default:
+		return cmd, "", errors.New("Internal Error 42. Please Report this.")
 	}
 
 	return cmd, responseString, nil
