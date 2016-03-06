@@ -53,7 +53,7 @@ type Command struct {
 	Hidden bool // Whether every use can see output or not
 }
 
-func parseCommand(cmd string, cfg Configuration) (*Command, error) {
+func parseCommand(cmd string, cfg *Configuration) (*Command, error) {
 	flagSet := flag.NewFlagSet("command", flag.ContinueOnError)
 	command := new(Command)
 
@@ -78,7 +78,42 @@ func parseCommand(cmd string, cfg Configuration) (*Command, error) {
 	return command, nil
 }
 
-func handleCommand(w http.ResponseWriter, r *http.Request) {
+func handleCommand(input string, cfg *Configuration) (*Command, string, error) {
+
+	cmd, err := parseCommand(input, cfg)
+	if err != nil {
+		return nil, "", err
+	}
+
+	rw, err, kill := mcquery.Connect(cmd.Ip, cmd.Port)
+	if err != nil {
+		kill <- true
+		return cmd, "", err
+	}
+	challenge, err := mcquery.Handshake(rw)
+	if err != nil {
+		kill <- true
+		return cmd, "", err
+	}
+	statResponse, err := mcquery.BasicStat(rw, challenge)
+	if err != nil {
+		kill <- true
+		return cmd, "", err
+	}
+	kill <- true
+
+	responseString := fmt.Sprintf("```MOTD: %s\n", statResponse.Motd)
+	responseString += fmt.Sprintf("Gametype: %s\n", statResponse.Gametype)
+	responseString += fmt.Sprintf("Map: %s\n", statResponse.Map)
+	responseString += fmt.Sprintf("NumPlayers: %s\n", statResponse.NumPlayers)
+	responseString += fmt.Sprintf("MaxPlayers: %s\n", statResponse.MaxPlayers)
+	responseString += fmt.Sprintf("HostPort: %d\n", statResponse.HostPort)
+	responseString += fmt.Sprintf("HostIp: %s\n```", statResponse.HostIp)
+
+	return cmd, responseString, nil
+}
+
+func processRequest(w http.ResponseWriter, r *http.Request) {
 
 	if globalConfiguration.SlackToken != "" &&
 		globalConfiguration.SlackToken != r.FormValue("token") {
@@ -89,8 +124,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd, err := parseCommand(r.FormValue("text"), globalConfiguration)
-
+	cmd, responseString, err := handleCommand(r.FormValue("text"), &globalConfiguration)
 	if err != nil {
 		log.Println(err.Error())
 		w.WriteHeader(400)
@@ -98,41 +132,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO consolidate all these steps in package mcquery
-	rw, err, kill := mcquery.Connect(cmd.Ip, cmd.Port)
-	if err != nil {
-		log.Println(err.Error())
-		w.WriteHeader(400)
-		w.Write([]byte("An error occurred while connecting to the MC server."))
-		kill <- true
-		return
-	}
-	challenge, err := mcquery.Handshake(rw)
-	if err != nil {
-		log.Println(err.Error())
-		w.WriteHeader(400)
-		w.Write([]byte("An error occurred while handshaking with MC server."))
-		kill <- true
-		return
-	}
-	statResponse, err := mcquery.BasicStat(rw, challenge)
-	if err != nil {
-		log.Println(err.Error())
-		w.WriteHeader(400)
-		w.Write([]byte("An error occurred while reading status of MC server."))
-		kill <- true
-		return
-	}
-	kill <- true
-
 	responseMap := make(map[string]interface{})
-	responseString := fmt.Sprintf("```MOTD: %s\n", statResponse.Motd)
-	responseString += fmt.Sprintf("Gametype: %s\n", statResponse.Gametype)
-	responseString += fmt.Sprintf("Map: %s\n", statResponse.Map)
-	responseString += fmt.Sprintf("NumPlayers: %s\n", statResponse.NumPlayers)
-	responseString += fmt.Sprintf("MaxPlayers: %s\n", statResponse.MaxPlayers)
-	responseString += fmt.Sprintf("HostPort: %d\n", statResponse.HostPort)
-	responseString += fmt.Sprintf("HostIp: %s\n```", statResponse.HostIp)
 	responseMap["text"] = responseString
 	if cmd.Hidden {
 		responseMap["response_type"] = "ephemeral"
@@ -160,13 +160,25 @@ func main() {
 
 	port := flag.String("port", "80", "Port to bind to")
 	configFile := flag.String("config", "", "Configuration file")
+	debug := flag.String("debug", "", "Command to process for debug purposes")
 	flag.Parse()
 
 	log.Println("Loading configuration")
 	globalConfiguration = getConfiguration(*configFile)
 	log.Printf("Configuration is %+v\n", globalConfiguration)
 
-	http.HandleFunc("/", handleCommand)
+	if *debug != "" {
+		log.Printf("Running debug command \"%s\"\n", *debug)
+		cmd, resp, err := handleCommand(*debug, &globalConfiguration)
+		log.Printf("Command is %+v\n", cmd)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("%s\n", resp)
+		return
+	}
+
+	http.HandleFunc("/", processRequest)
 
 	log.Printf("Binding to port %s\n", *port)
 
