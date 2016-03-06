@@ -17,6 +17,7 @@ type Configuration struct {
 	HiddenByDefault bool
 	DefaultPort     uint16
 	DefaultIp       string
+	SlackToken      string
 }
 
 var globalConfiguration Configuration
@@ -28,6 +29,7 @@ func getConfiguration(filename string) Configuration {
 		return Configuration{
 			false,
 			25565, // default minecraft port
+			"",
 			"",
 		}
 	}
@@ -77,6 +79,15 @@ func parseCommand(cmd string, cfg Configuration) (*Command, error) {
 }
 
 func handleCommand(w http.ResponseWriter, r *http.Request) {
+
+	if globalConfiguration.SlackToken != "" &&
+		globalConfiguration.SlackToken != r.FormValue("token") {
+		log.Printf("Connection with bad token: %s and command: %s\n",
+			r.FormValue("token"), r.FormValue("text"))
+		w.WriteHeader(401) // unauthorized
+		w.Write([]byte("Invalid API token. Your team is not set up to use this server"))
+		return
+	}
 
 	cmd, err := parseCommand(r.FormValue("text"), globalConfiguration)
 
