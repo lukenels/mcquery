@@ -51,6 +51,7 @@ type Command struct {
 	Ip     string
 	Port   uint16
 	Hidden bool // Whether every use can see output or not
+	Full   bool // Perform a full stat instead of small stat
 }
 
 func parseCommand(cmd string, cfg *Configuration) (*Command, error) {
@@ -61,6 +62,9 @@ func parseCommand(cmd string, cfg *Configuration) (*Command, error) {
 		"Determines if command output visible to everyone")
 
 	flagSet.StringVar(&command.Ip, "ip", cfg.DefaultIp, "Minecraft server IP")
+
+	// TODO make default part of configuration
+	flagSet.BoolVar(&command.Full, "full", false, "Perform full stat")
 
 	var portNum uint64
 	flagSet.Uint64Var(&portNum, "port", uint64(cfg.DefaultPort), "MC Server Port")
@@ -95,20 +99,45 @@ func handleCommand(input string, cfg *Configuration) (*Command, string, error) {
 		kill <- true
 		return cmd, "", err
 	}
-	statResponse, err := mcquery.BasicStat(rw, challenge)
-	if err != nil {
-		kill <- true
-		return cmd, "", err
-	}
-	kill <- true
 
-	responseString := fmt.Sprintf("```MOTD: %s\n", statResponse.Motd)
-	responseString += fmt.Sprintf("Gametype: %s\n", statResponse.Gametype)
-	responseString += fmt.Sprintf("Map: %s\n", statResponse.Map)
-	responseString += fmt.Sprintf("NumPlayers: %s\n", statResponse.NumPlayers)
-	responseString += fmt.Sprintf("MaxPlayers: %s\n", statResponse.MaxPlayers)
-	responseString += fmt.Sprintf("HostPort: %d\n", statResponse.HostPort)
-	responseString += fmt.Sprintf("HostIp: %s\n```", statResponse.HostIp)
+	var responseString string
+	if !cmd.Full {
+		statResponse, err := mcquery.BasicStat(rw, challenge)
+		if err != nil {
+			kill <- true
+			return cmd, "", err
+		}
+		kill <- true
+
+		responseString += fmt.Sprintf("```MOTD: %s\n", statResponse.Motd)
+		responseString += fmt.Sprintf("Gametype: %s\n", statResponse.Gametype)
+		responseString += fmt.Sprintf("Map: %s\n", statResponse.Map)
+		responseString += fmt.Sprintf("NumPlayers: %s\n", statResponse.NumPlayers)
+		responseString += fmt.Sprintf("MaxPlayers: %s\n", statResponse.MaxPlayers)
+		responseString += fmt.Sprintf("HostPort: %d\n", statResponse.HostPort)
+		responseString += fmt.Sprintf("HostIp: %s\n```", statResponse.HostIp)
+	} else {
+		statResponse, err := mcquery.FullStat(rw, challenge)
+		if err != nil {
+			kill <- true
+			return cmd, "", err
+		}
+		kill <- true
+
+		responseString += "```\n"
+		for k, v := range statResponse.KeyValues {
+			responseString += fmt.Sprintf("%s: %s\n", k, v)
+		}
+		if len(statResponse.Players) > 0 {
+			responseString += "Players:\n"
+			for _, player := range statResponse.Players {
+				responseString += fmt.Sprintf("    %s\n", player)
+			}
+		} else {
+			responseString += "Players: <none>\n"
+		}
+		responseString += "```"
+	}
 
 	return cmd, responseString, nil
 }
