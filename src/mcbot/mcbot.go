@@ -6,30 +6,79 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"mcquery"
 	"net/http"
-	"strconv"
+	"os"
 	"strings"
 )
 
-func parseCommand(cmd string) (string, uint16, error) {
-	args := strings.Fields(cmd)
-	if len(args) == 0 {
-		return "", 0, errors.New("Your request was malformed.")
-	} else if len(args) == 1 {
-		return args[0], 25565, nil
-	} else {
-		port, err := strconv.ParseUint(args[1], 10, 16)
-		if err != nil {
-			return "", 0, errors.New("Your request was malformed.")
+type Configuration struct {
+	HiddenByDefault bool
+	DefaultPort     uint16
+	DefaultIp       string
+}
+
+var globalConfiguration Configuration
+
+func getConfiguration(filename string) Configuration {
+	var cfg Configuration
+	if filename == "" {
+		log.Println("No configuration file, using default")
+		return Configuration{
+			false,
+			25565, // default minecraft port
+			"",
 		}
-		return args[0], uint16(port), nil
 	}
+
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&cfg)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	return cfg
+}
+
+type Command struct {
+	Ip     string
+	Port   uint16
+	Hidden bool // Whether every use can see output or not
+}
+
+func parseCommand(cmd string, cfg Configuration) (*Command, error) {
+	flagSet := flag.NewFlagSet("command", flag.ContinueOnError)
+	command := new(Command)
+
+	flagSet.BoolVar(&command.Hidden, "hidden", cfg.HiddenByDefault,
+		"Determines if command output visible to everyone")
+
+	flagSet.StringVar(&command.Ip, "ip", cfg.DefaultIp, "Minecraft server IP")
+
+	var portNum uint64
+	flagSet.Uint64Var(&portNum, "port", uint64(cfg.DefaultPort), "MC Server Port")
+
+	err := flagSet.Parse(strings.Fields(cmd))
+	if err != nil {
+		return nil, err
+	}
+	if portNum > math.MaxUint16 {
+		return nil, errors.New("Port number out of range")
+	}
+
+	command.Port = uint16(portNum)
+
+	return command, nil
 }
 
 func handleCommand(w http.ResponseWriter, r *http.Request) {
 
-	ip, port, err := parseCommand(r.FormValue("text"))
+	cmd, err := parseCommand(r.FormValue("text"), globalConfiguration)
 
 	if err != nil {
 		log.Println(err.Error())
@@ -39,7 +88,7 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO consolidate all these steps in package mcquery
-	rw, err, kill := mcquery.Connect(ip, port)
+	rw, err, kill := mcquery.Connect(cmd.Ip, cmd.Port)
 	if err != nil {
 		log.Println(err.Error())
 		w.WriteHeader(400)
@@ -74,7 +123,11 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 	responseString += fmt.Sprintf("HostPort: %d\n", statResponse.HostPort)
 	responseString += fmt.Sprintf("HostIp: %s\n```", statResponse.HostIp)
 	responseMap["text"] = responseString
-	responseMap["response_type"] = "in_channel"
+	if cmd.Hidden {
+		responseMap["response_type"] = "ephemeral"
+	} else {
+		responseMap["response_type"] = "in_channel"
+	}
 	data, err := json.Marshal(responseMap)
 
 	if err != nil {
@@ -92,14 +145,19 @@ func handleCommand(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-  fmt.Printf("Starting mcbot server...\n")
+	log.Println("Starting mcbot server")
 
 	port := flag.String("port", "80", "Port to bind to")
+	configFile := flag.String("config", "", "Configuration file")
 	flag.Parse()
+
+	log.Println("Loading configuration")
+	globalConfiguration = getConfiguration(*configFile)
+	log.Printf("Configuration is %+v\n", globalConfiguration)
 
 	http.HandleFunc("/", handleCommand)
 
-  fmt.Printf("Port is %s\n", *port)
+	log.Printf("Binding to port %s\n", *port)
 
 	err := http.ListenAndServe(fmt.Sprintf(":%s", *port), nil)
 
