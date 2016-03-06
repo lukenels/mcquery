@@ -70,13 +70,13 @@ Usage of the slash command is simple. In a slack channel on a team with the
 integration set up, use the following command
 
 ```
-/mcbot [--ip ip] [--port port] [--hidden=bool] [--full=bool]
+/mcbot [--ip ip] [--port port] [--hidden=bool] [--type=string]
 ```
 
 Where `ip` and `port` are, respectively, the IP and port of the minecraft
 server, and `hidden` controls whether every user in the channel sees the output
-of the command. Setting `full` causes a full stat to be performed, which
-includes information about exactly which players are currently on. Upon success,
+of the command. The `type` flag is one of `full`, `basic`, or `players`, each
+of which will perform different types of stats. Upon success,
 the server will respond with something looking like the following (in the case
 of a basic stat)
 
