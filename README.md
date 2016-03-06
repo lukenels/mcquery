@@ -39,12 +39,16 @@ default parameters of the server. Here is an example configuration file.
 {
     "HiddenByDefault": true,
     "DefaultPort": 25565,
-    "DefaultIp": "127.0.0.1"
+    "DefaultIp": "127.0.0.1",
+    "SlackToken": "mySecretSlackToken"
 }
 ```
 
 If `HiddenByDefault` is set, then by default only the user that sent the slack
-command will be able to see the output.
+command will be able to see the output. `SlackToken` will specify the slack
+token that needs to be sent for the server to operate. If it's the empty string,
+then the token is not checked. **This isn't recommended because it will permit
+any team to use your mcbot server.**
 
 ## Using slash command
 
