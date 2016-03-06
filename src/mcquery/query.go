@@ -15,6 +15,10 @@ const (
 	statusType    = 0
 )
 
+// Max amount of times looped readers can loop for, in case key values
+// or player list is malformed
+const loopLimit = 512
+
 func magicBytes() [2]byte {
 	return [2]byte{0xFE, 0xFD}
 }
@@ -30,6 +34,23 @@ type basicStatRequest struct {
 	Type           byte
 	SessionId      int32
 	ChallengeToken int32
+}
+
+type fullStatRequest struct {
+	Magic          [2]byte
+	Type           byte
+	SessionId      int32
+	ChallengeToken int32
+	Padding        [4]byte
+}
+
+type FullStatResponse struct {
+	Type      byte
+	SessionId int32
+	Padding   [11]byte
+	KeyValues map[string]string
+	Padding2  [10]byte
+	Players   []string
 }
 
 type responseHeader struct {
@@ -66,6 +87,107 @@ func Connect(ip string, port uint16) (*bufio.ReadWriter, error, chan<- bool) {
 	return rw, nil, kill
 }
 
+func FullStat(rw *bufio.ReadWriter, challenge int32) (*FullStatResponse, error) {
+
+	var response FullStatResponse
+	done := make(chan error)
+	request := fullStatRequest{
+		Magic:          magicBytes(),
+		Type:           statusType,
+		SessionId:      1,
+		ChallengeToken: challenge,
+	}
+
+	go func() {
+
+		err := binary.Write(rw, binary.BigEndian, request)
+		if err != nil {
+			done <- err
+			return
+		}
+		rw.Flush()
+
+		var header responseHeader
+		err = binary.Read(rw, binary.BigEndian, &header)
+		if err != nil {
+			done <- err
+			return
+		}
+		response.Type = header.Type
+		response.SessionId = header.SessionId
+
+		_, err = rw.Discard(11)
+		if err != nil {
+			done <- err
+			return
+		}
+
+		response.KeyValues = make(map[string]string)
+		for i := 0; ; i += 1 {
+			var key, value []byte
+			key, err = rw.ReadBytes(0)
+			if err != nil {
+				done <- err
+				return
+			}
+			key = key[:len(key)-1]
+			if len(key) == 0 {
+				break
+			}
+			value, err = rw.ReadBytes(0)
+			if err != nil {
+				done <- err
+				return
+			}
+			value = value[:len(value)-1]
+			response.KeyValues[string(key)] = string(value)
+			if i > loopLimit {
+				done <- errors.New("Too many key values!")
+				return
+			}
+		}
+
+		_, err = rw.Discard(10)
+		if err != nil {
+			done <- err
+			return
+		}
+
+		response.Players = make([]string, 0)
+		for i := 0; ; i += 1 {
+
+			playerName, err := rw.ReadBytes(0)
+			if err != nil {
+				done <- err
+				return
+			}
+			playerName = playerName[:len(playerName)-1]
+			if len(playerName) == 0 {
+				break
+			}
+			response.Players = append(response.Players, string(playerName))
+
+			if i > loopLimit {
+				done <- errors.New("Too many players!")
+				return
+			}
+		}
+
+		done <- nil
+	}()
+
+	select {
+	case <-time.After(2 * time.Second):
+		return nil, nil
+	case err := <-done:
+		if err == nil {
+			return &response, nil
+		} else {
+			return nil, err
+		}
+	}
+}
+
 func BasicStat(rw *bufio.ReadWriter, challenge int32) (*BasicStatResponse, error) {
 
 	var response BasicStatResponse
@@ -92,6 +214,8 @@ func BasicStat(rw *bufio.ReadWriter, challenge int32) (*BasicStatResponse, error
 			done <- err
 			return
 		}
+		response.Type = responseHeader.Type
+		response.SessionId = responseHeader.SessionId
 
 		// All of this code here is really ugly, makes me want to switch to
 		// haskell and use monads...
